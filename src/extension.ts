@@ -144,11 +144,24 @@ docs(readme): 更新安裝說明
 ];
 
 export function activate(context: vscode.ExtensionContext) {
-    const disposable = vscode.commands.registerCommand('copilotConfigManager.openManager', () => {
-        CopilotConfigPanel.createOrShow(context.extensionUri);
-    });
+    console.log('Copilot Config Manager is now active');
+    
+    try {
+        const disposable = vscode.commands.registerCommand('copilotConfigManager.openManager', () => {
+            try {
+                CopilotConfigPanel.createOrShow(context.extensionUri);
+            } catch (error) {
+                console.error('Error opening Copilot Config Manager:', error);
+                vscode.window.showErrorMessage('無法開啟 Copilot Config Manager：' + (error instanceof Error ? error.message : String(error)));
+            }
+        });
 
-    context.subscriptions.push(disposable);
+        context.subscriptions.push(disposable);
+        console.log('Copilot Config Manager commands registered successfully');
+    } catch (error) {
+        console.error('Error activating Copilot Config Manager:', error);
+        vscode.window.showErrorMessage('Copilot Config Manager 啟動失敗：' + (error instanceof Error ? error.message : String(error)));
+    }
 }
 
 class CopilotConfigPanel {
@@ -157,29 +170,33 @@ class CopilotConfigPanel {
 
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
-    private _disposables: vscode.Disposable[] = [];
+    private _disposables: vscode.Disposable[] = [];    public static createOrShow(extensionUri: vscode.Uri) {
+        try {
+            const column = vscode.window.activeTextEditor
+                ? vscode.window.activeTextEditor.viewColumn
+                : undefined;
 
-    public static createOrShow(extensionUri: vscode.Uri) {
-        const column = vscode.window.activeTextEditor
-            ? vscode.window.activeTextEditor.viewColumn
-            : undefined;
-
-        if (CopilotConfigPanel.currentPanel) {
-            CopilotConfigPanel.currentPanel._panel.reveal(column);
-            return;
-        }
-
-        const panel = vscode.window.createWebviewPanel(
-            CopilotConfigPanel.viewType,
-            'Copilot Config Manager',
-            column || vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                localResourceRoots: [extensionUri]
+            if (CopilotConfigPanel.currentPanel) {
+                CopilotConfigPanel.currentPanel._panel.reveal(column);
+                return;
             }
-        );
 
-        CopilotConfigPanel.currentPanel = new CopilotConfigPanel(panel, extensionUri);
+            const panel = vscode.window.createWebviewPanel(
+                CopilotConfigPanel.viewType,
+                'Copilot Config Manager',
+                column || vscode.ViewColumn.One,
+                {
+                    enableScripts: true,
+                    localResourceRoots: [extensionUri],
+                    retainContextWhenHidden: true
+                }
+            );
+
+            CopilotConfigPanel.currentPanel = new CopilotConfigPanel(panel, extensionUri);
+        } catch (error) {
+            console.error('Error creating Copilot Config Panel:', error);
+            vscode.window.showErrorMessage('無法建立 Copilot Config Manager 面板：' + (error instanceof Error ? error.message : String(error)));
+        }
     }
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
@@ -207,9 +224,7 @@ class CopilotConfigPanel {
             null,
             this._disposables
         );
-    }
-
-    private async _loadFile(filename: string) {
+    }    private async _loadFile(filename: string) {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             vscode.window.showErrorMessage('請先開啟一個工作空間。此擴展僅管理當前專案的 .github 配置檔案，不會影響全域設定。');
@@ -220,6 +235,16 @@ class CopilotConfigPanel {
         const filePath = path.join(workspaceFolder.uri.fsPath, '.github', filename);
         
         try {
+            if (!fs.existsSync(filePath)) {
+                this._panel.webview.postMessage({
+                    command: 'fileLoaded',
+                    filename: filename,
+                    content: '',
+                    exists: false
+                });
+                return;
+            }
+
             const content = fs.readFileSync(filePath, 'utf8');
             this._panel.webview.postMessage({
                 command: 'fileLoaded',
@@ -228,6 +253,8 @@ class CopilotConfigPanel {
                 exists: true
             });
         } catch (error) {
+            console.error(`Error loading file ${filename}:`, error);
+            vscode.window.showErrorMessage(`載入檔案 ${filename} 時發生錯誤: ${error instanceof Error ? error.message : String(error)}`);
             this._panel.webview.postMessage({
                 command: 'fileLoaded',
                 filename: filename,
@@ -235,12 +262,16 @@ class CopilotConfigPanel {
                 exists: false
             });
         }
-    }
-
-    private async _saveFile(filename: string, content: string) {
+    }    private async _saveFile(filename: string, content: string) {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             vscode.window.showErrorMessage('請先開啟一個工作空間。此擴展僅管理當前專案的配置檔案。');
+            return;
+        }
+
+        // 驗證檔案名稱安全性
+        if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+            vscode.window.showErrorMessage('無效的檔案名稱');
             return;
         }
 
@@ -263,40 +294,51 @@ class CopilotConfigPanel {
                 success: true
             });
         } catch (error) {
-            vscode.window.showErrorMessage(`儲存 ${filename} 失敗: ${error}`);
+            console.error(`Error saving file ${filename}:`, error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`儲存 ${filename} 失敗: ${errorMessage}`);
             this._panel.webview.postMessage({
                 command: 'fileSaved',
                 filename: filename,
                 success: false
             });
         }
-    }
-
-    private async _checkFileExists(filename: string) {
+    }    private async _checkFileExists(filename: string) {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             return;
         }
 
-        const filePath = path.join(workspaceFolder.uri.fsPath, '.github', filename);
-        const exists = fs.existsSync(filePath);
+        try {
+            const filePath = path.join(workspaceFolder.uri.fsPath, '.github', filename);
+            const exists = fs.existsSync(filePath);
 
-        this._panel.webview.postMessage({
-            command: 'fileExistsResult',
-            filename: filename,
-            exists: exists
-        });
-    }
-
-    public dispose() {
+            this._panel.webview.postMessage({
+                command: 'fileExistsResult',
+                filename: filename,
+                exists: exists
+            });
+        } catch (error) {
+            console.error(`Error checking file existence for ${filename}:`, error);
+            this._panel.webview.postMessage({
+                command: 'fileExistsResult',
+                filename: filename,
+                exists: false
+            });
+        }
+    }    public dispose() {
         CopilotConfigPanel.currentPanel = undefined;
 
         this._panel.dispose();
 
         while (this._disposables.length) {
-            const x = this._disposables.pop();
-            if (x) {
-                x.dispose();
+            const disposable = this._disposables.pop();
+            if (disposable) {
+                try {
+                    disposable.dispose();
+                } catch (error) {
+                    console.error('Error disposing resource:', error);
+                }
             }
         }
     }
@@ -474,24 +516,32 @@ class CopilotConfigPanel {
                 command: 'loadFile',
                 filename: filename
             });
-        }
-
-        function saveFile(filename) {
-            const content = document.getElementById('content-' + filename).value;
-            vscode.postMessage({
-                command: 'saveFile',
-                filename: filename,
-                content: content
-            });
+        }        function saveFile(filename) {
+            try {
+                const content = document.getElementById('content-' + filename).value;
+                vscode.postMessage({
+                    command: 'saveFile',
+                    filename: filename,
+                    content: content
+                });
+            } catch (error) {
+                console.error('Error saving file:', error);
+            }
         }
 
         function resetToDefault(filename) {
-            const defaultContents = {
-                ${COPILOT_CONFIGS.map(config => `'${config.filename}': \`${config.defaultContent.replace(/`/g, '\\`')}\``).join(',\n                ')}
-            };
-            
-            const textarea = document.getElementById('content-' + filename);
-            textarea.value = defaultContents[filename] || '';
+            try {
+                const defaultContents = {
+                    ${COPILOT_CONFIGS.map(config => `'${config.filename}': \`${config.defaultContent.replace(/[`\\$]/g, '\\$&')}\``).join(',\n                    ')}
+                };
+                
+                const textarea = document.getElementById('content-' + filename);
+                if (textarea) {
+                    textarea.value = defaultContents[filename] || '';
+                }
+            } catch (error) {
+                console.error('Error resetting to default:', error);
+            }
         }
 
         // 處理來自擴展的訊息
@@ -538,4 +588,9 @@ class CopilotConfigPanel {
     }
 }
 
-export function deactivate() {}
+export function deactivate() {
+    // 清理資源
+    if (CopilotConfigPanel.currentPanel) {
+        CopilotConfigPanel.currentPanel.dispose();
+    }
+}
