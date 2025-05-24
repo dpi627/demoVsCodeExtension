@@ -1,8 +1,8 @@
-# Copilot Config Manager
+# 🤖 Copilot Config Manager
 
 基於 arc42 架構文件範本的 Visual Studio Code 擴展
 
-## 1. 簡介與目標
+## 1. 🎯 簡介與目標
 
 ### 1.1 需求概述
 
@@ -26,7 +26,7 @@ Copilot Config Manager 是一個專為 Visual Studio Code 設計的擴展，旨�
 | **專案維護者** | 程式碼審查 | 穩定可靠的程式碼品質 |
 | **DevOps 工程師** | 部署流程 | 無衝突的安裝和更新機制 |
 
-## 2. 架構約束
+## 2. ⚙️ 架構約束
 
 ### 2.1 技術約束
 
@@ -51,7 +51,7 @@ Copilot Config Manager 是一個專為 Visual Studio Code 設計的擴展，旨�
 - 遵循 VSCode 擴展開發最佳實務
 - 採用 arc42 文件架構
 
-## 3. 系統範疇與環境
+## 3. 🌐 系統範疇與環境
 
 ### 3.1 業務環境
 
@@ -82,7 +82,7 @@ graph LR
     FS --> COPILOT[GitHub Copilot Engine]
 ```
 
-## 4. 解決方案策略
+## 4. 💡 解決方案策略
 
 ### 4.1 技術決策
 
@@ -100,7 +100,7 @@ graph LR
 - **可靠性**: 加入確認對話框和錯誤處理機制
 - **效能**: 使用異步操作和延遲載入
 
-## 5. 建構模組視圖
+## 5. 🏗️ 建構模組視圖
 
 ### 5.1 層級 1 - 系統概覽
 
@@ -149,7 +149,7 @@ graph TB
 | **CopilotConfigPanel** | Webview 面板管理 | `focusConfig()`, `_removeFile()` |
 | **CopilotConfigProvider** | Activity Bar 資料提供者 | `getChildren()`, `refresh()` |
 
-## 6. 執行時期視圖
+## 6. ⚡ 執行時期視圖
 
 ### 6.1 擴展啟動流程
 
@@ -190,7 +190,7 @@ sequenceDiagram
     CORE->>UI: 更新狀態
 ```
 
-## 7. 部署視圖
+## 7. 🚀 部署視圖
 
 ### 7.1 部署架構
 
@@ -228,7 +228,7 @@ graph TB
 | **Node.js** | ≥ 16.0 | 執行時期（開發用） |
 | **TypeScript** | ≥ 4.9 | 編譯時期（開發用） |
 
-## 8. 橫切關注點
+## 8. 🔧 橫切關注點
 
 ### 8.1 安全性
 
@@ -273,7 +273,7 @@ try {
 - UI 文字與程式邏輯分離
 - 預設範本內容可本地化
 
-## 9. 架構決策
+## 9. 📊 架構決策
 
 ### 9.1 ADR-001: 使用 Webview 實作 UI
 
@@ -296,7 +296,7 @@ try {
 **理由**: 提供便捷的存取入口，符合 VSCode UX 模式  
 **後果**: 增加 UI 複雜度，但提升存取便利性
 
-## 10. 品質需求
+## 10. 🌟 品質需求
 
 ### 10.1 品質樹狀圖
 
@@ -327,7 +327,7 @@ try {
 | **安全性** | 意外檔案路徑 | 非法路徑請求 | 拒絕操作並警告 | 100% 路徑驗證 |
 | **效能** | 大型專案載入 | 開啟管理器 | < 1 秒顯示介面 | 效能測試 |
 
-## 11. 風險與技術債務
+## 11. ⚠️ 風險與技術債務
 
 ### 11.1 已識別風險
 
@@ -345,7 +345,7 @@ try {
 | **國際化支援有限** | 使用者體驗 | 中 | v1.5.0 多語言支援 |
 | **錯誤處理可改善** | 可靠性 | 中 | 持續優化 |
 
-## 12. 詞彙表
+## 12. 📚 詞彙表
 
 | 術語 | 定義 |
 |------|------|
@@ -359,7 +359,7 @@ try {
 
 ---
 
-## 快速開始
+## 🚀 快速開始
 
 ### 安裝
 
@@ -383,7 +383,7 @@ code --install-extension copilot-config-manager-1.3.0.vsix
 - `copilot-code-instructions.md` - 程式碼生成
 - `copilot-pullrequest-instructions.md` - Pull Request
 - `copilot-test-instructions.md` - 測試生成
-## 技術規格
+## 📋 技術規格
 
 | 項目 | 值 |
 |------|-----|
@@ -393,7 +393,7 @@ code --install-extension copilot-config-manager-1.3.0.vsix
 | **TypeScript** | 4.9+ |
 | **套件大小** | 34.45 KB |
 
-## 相關資源
+## 🔗 相關資源
 
 - **GitHub Copilot 文件**: [docs.github.com/copilot](https://docs.github.com/en/copilot)
 - **VSCode 擴展 API**: [code.visualstudio.com/api](https://code.visualstudio.com/api)
