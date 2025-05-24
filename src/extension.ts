@@ -259,10 +259,17 @@ export function activate(context: vscode.ExtensionContext) {
                 console.error('Error syncing existing files:', error);
                 vscode.window.showErrorMessage('同步現有檔案時發生錯誤：' + (error instanceof Error ? error.message : String(error)));
             }
-        });// 建立並註冊樹狀視圖提供者
+        });        // 建立並註冊樹狀視圖提供者 (Explorer 面板)
         const provider = new CopilotConfigProvider();
         const treeView = vscode.window.createTreeView('copilotConfigManager.view', {
             treeDataProvider: provider,
+            showCollapseAll: false
+        });
+
+        // 建立並註冊 Activity Bar 視圖提供者
+        const activityBarProvider = new CopilotConfigProvider();
+        const activityBarTreeView = vscode.window.createTreeView('copilotConfigManager.mainView', {
+            treeDataProvider: activityBarProvider,
             showCollapseAll: false
         });
 
@@ -289,6 +296,7 @@ export function activate(context: vscode.ExtensionContext) {
         });        context.subscriptions.push(disposable);
         context.subscriptions.push(syncCommand);
         context.subscriptions.push(treeView);
+        context.subscriptions.push(activityBarTreeView);
         context.subscriptions.push(fileWatcher);
         console.log('Copilot Config Manager commands and views registered successfully');
     } catch (error) {

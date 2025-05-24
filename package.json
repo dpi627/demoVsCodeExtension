@@ -2,7 +2,7 @@
   "name": "copilot-config-manager",
   "displayName": "Copilot Config Manager",
   "description": "管理 GitHub Copilot 配置檔案的 VSCode 擴展",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "publisher": "your-publisher-name",
   "icon": "icon.png",
   "repository": {
@@ -26,7 +26,24 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "copilotConfigManager",
+          "title": "Copilot Config Manager",
+          "icon": "$(copilot)"
+        }
+      ]
+    },
     "views": {
+      "copilotConfigManager": [
+        {
+          "id": "copilotConfigManager.mainView",
+          "name": "配置管理",
+          "when": "workspaceFolderCount > 0",
+          "icon": "$(gear)"
+        }
+      ],
       "explorer": [
         {
           "id": "copilotConfigManager.view",
