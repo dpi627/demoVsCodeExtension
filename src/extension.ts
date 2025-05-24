@@ -820,10 +820,11 @@ class CopilotConfigPanel {
                 </div>
             </div>
         `).join('')}
-    </div>
-
-    <script>
+    </div>    <script>
         const vscode = acquireVsCodeApi();
+        
+        // 定義 COPILOT_CONFIGS 變數供 JavaScript 使用
+        const COPILOT_CONFIGS = ${JSON.stringify(COPILOT_CONFIGS)};
         
         // 初始化時檢查所有檔案狀態並載入內容
         window.addEventListener('load', function() {
