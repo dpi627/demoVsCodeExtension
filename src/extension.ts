@@ -15,8 +15,8 @@ const COPILOT_CONFIGS: CopilotConfig[] = [
     {
         filename: 'copilot-instructions.md',
         displayName: '通用指令',
-        description: '為 GitHub Copilot 設定通用的編程指令和偏好',
-        vscodeSetting: 'github.copilot.chat.instructions',
+        description: '為 GitHub Copilot 設定通用的編程指令和偏好（僅在 .github 資料夾中儲存）',
+        // 注意：此檔案不設定 vscodeSetting，僅在 .github 中產生檔案
         defaultContent: `# GitHub Copilot 通用指令
 
 ## 編程風格
@@ -82,27 +82,6 @@ docs(readme): 更新安裝說明
 - 指出潛在的問題和風險`
     },
     {
-        filename: 'copilot-chat-instructions.md',
-        displayName: 'Chat 對話指令',
-        description: '設定 GitHub Copilot Chat 的對話風格和回應方式',
-        vscodeSetting: 'github.copilot.chat.instructions',
-        defaultContent: `# Copilot Chat 指令
-
-## 對話風格
-- 使用繁體中文回應
-- 保持專業但友善的語調
-- 提供具體且實用的建議
-
-## 技術偏好
-- 優先推薦最佳實踐
-- 解釋程式碼背後的原理
-- 提供多種解決方案供選擇
-
-## 回應格式
-- 使用清晰的結構化回答
-- 包含程式碼範例
-- 提供相關文件連結`
-    },    {
         filename: 'copilot-code-instructions.md',
         displayName: '程式碼生成指令',
         description: '設定 GitHub Copilot 生成程式碼的風格和標準',
@@ -126,34 +105,142 @@ docs(readme): 更新安裝說明
 - 撰寫對應的單元測試`
     },
     {
-        filename: 'copilot-workspace-instructions.md',
-        displayName: '工作空間指令',
-        description: '設定整個工作空間的 GitHub Copilot 行為',
-        vscodeSetting: 'github.copilot.chat.instructions',
-        defaultContent: `# 工作空間指令
+        filename: 'copilot-pullrequest-instructions.md',
+        displayName: 'Pull Request 描述指令',
+        description: '設定 GitHub Copilot 生成 Pull Request 描述的格式和內容',
+        vscodeSetting: 'github.copilot.chat.pullRequestDescriptionGeneration.instructions',
+        defaultContent: `# Pull Request 描述指令
 
-## 專案架構
-- 遵循專案的資料夾結構規範
-- 使用相對路徑導入模組
-- 保持檔案命名一致性
+## 描述格式
+- 使用清晰的標題總結變更
+- 提供詳細的變更說明
+- 列出相關的 Issue 編號
 
-## 開發環境
-- 針對 Node.js 和 TypeScript 優化
-- 使用 ESLint 和 Prettier 規則
-- 遵循專案的 package.json 依賴
+## 內容結構
+### 變更摘要
+- 簡述主要功能或修復
+- 說明變更的影響範圍
 
-## 團隊協作
-- 遵循團隊的編碼規範
-- 使用統一的程式碼格式
-- 保持程式碼審查標準一致`
+### 測試說明
+- 描述執行的測試
+- 確認功能正常運作
+
+### 檢查清單
+- [ ] 程式碼已通過測試
+- [ ] 文件已更新
+- [ ] 符合編碼規範`
+    },
+    {
+        filename: 'copilot-test-instructions.md',
+        displayName: '測試生成指令',
+        description: '設定 GitHub Copilot 生成測試的標準和格式',
+        vscodeSetting: 'github.copilot.chat.testGeneration.instructions',
+        defaultContent: `# 測試生成指令
+
+## 測試框架
+- 使用 Jest 測試框架
+- 遵循 AAA 模式 (Arrange, Act, Assert)
+- 使用描述性的測試名稱
+
+## 測試覆蓋
+- 測試正常情況和邊界情況
+- 包含錯誤處理測試
+- 模擬外部依賴
+
+## 測試結構
+\`\`\`javascript
+describe('功能模組', () => {
+  test('應該在正常情況下返回預期結果', () => {
+    // Arrange - 準備測試資料
+    // Act - 執行被測試的功能
+    // Assert - 驗證結果
+  });
+});
+\`\`\``
     }
 ];
+
+// 初始化同步現有配置檔案到 VSCode 設定
+async function initializeSyncExistingFiles() {
+    try {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return;
+        }
+
+        console.log('正在初始化同步現有配置檔案...');
+        
+        // 檢查每個配置檔案是否存在，如果存在則同步到 VSCode 設定
+        for (const config of COPILOT_CONFIGS) {
+            if (!config.vscodeSetting) {
+                continue; // 跳過沒有 VSCode 設定的檔案（如 copilot-instructions.md）
+            }
+
+            const filePath = vscode.Uri.joinPath(workspaceFolder.uri, '.github', config.filename);
+            
+            try {
+                await vscode.workspace.fs.stat(filePath);
+                // 檔案存在，同步到 VSCode 設定
+                await updateVSCodeSettingsForFile(config.filename);
+                console.log(`已同步現有檔案: ${config.filename} -> ${config.vscodeSetting}`);
+            } catch (error) {
+                // 檔案不存在，跳過
+                console.log(`檔案不存在，跳過: ${config.filename}`);
+            }
+        }
+        
+        console.log('現有配置檔案同步完成');
+    } catch (error) {
+        console.error('初始化同步過程中發生錯誤:', error);
+    }
+}
+
+// 為指定檔案更新 VSCode 設定的輔助函數
+async function updateVSCodeSettingsForFile(filename: string) {
+    try {
+        const config = COPILOT_CONFIGS.find(c => c.filename === filename);
+        if (!config?.vscodeSetting) {
+            return;
+        }
+
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return;
+        }
+
+        // 取得工作空間設定
+        const workspaceConfig = vscode.workspace.getConfiguration('', workspaceFolder.uri);
+          
+        // 設定檔案參考 - 使用 .github\ 前綴
+        const settingValue = [
+            {
+                "file": `.github\\${filename}`
+            }
+        ];
+
+        // 使用 Workspace 範圍寫入 workspace settings.json
+        const targetScope = vscode.ConfigurationTarget.Workspace;
+
+        // 更新設定
+        await workspaceConfig.update(
+            config.vscodeSetting,
+            settingValue,
+            targetScope
+        );
+
+        console.log(`Updated VSCode setting (Workspace): ${config.vscodeSetting} -> .github\\${filename}`);
+    } catch (error) {
+        console.error(`Error updating VSCode settings for ${filename}:`, error);
+    }
+}
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('Copilot Config Manager is now active');
     
     try {
-        // 註冊主要命令
+        // 初始化同步現有配置檔案到 VSCode 設定
+        initializeSyncExistingFiles();
+          // 註冊主要命令
         const disposable = vscode.commands.registerCommand('copilotConfigManager.openManager', () => {
             try {
                 CopilotConfigPanel.createOrShow(context.extensionUri);
@@ -161,7 +248,18 @@ export function activate(context: vscode.ExtensionContext) {
                 console.error('Error opening Copilot Config Manager:', error);
                 vscode.window.showErrorMessage('無法開啟 Copilot Config Manager：' + (error instanceof Error ? error.message : String(error)));
             }
-        });        // 建立並註冊樹狀視圖提供者
+        });
+
+        // 註冊手動同步現有檔案的命令
+        const syncCommand = vscode.commands.registerCommand('copilotConfigManager.syncExistingFiles', async () => {
+            try {
+                await initializeSyncExistingFiles();
+                vscode.window.showInformationMessage('現有配置檔案已同步到 VSCode 設定！');
+            } catch (error) {
+                console.error('Error syncing existing files:', error);
+                vscode.window.showErrorMessage('同步現有檔案時發生錯誤：' + (error instanceof Error ? error.message : String(error)));
+            }
+        });// 建立並註冊樹狀視圖提供者
         const provider = new CopilotConfigProvider();
         const treeView = vscode.window.createTreeView('copilotConfigManager.view', {
             treeDataProvider: provider,
@@ -188,9 +286,8 @@ export function activate(context: vscode.ExtensionContext) {
             if (CopilotConfigPanel.currentPanel) {
                 CopilotConfigPanel.currentPanel.refreshFileStatus();
             }
-        });
-
-        context.subscriptions.push(disposable);
+        });        context.subscriptions.push(disposable);
+        context.subscriptions.push(syncCommand);
         context.subscriptions.push(treeView);
         context.subscriptions.push(fileWatcher);
         console.log('Copilot Config Manager commands and views registered successfully');
@@ -376,27 +473,39 @@ class CopilotConfigPanel {
 
             // 取得工作空間設定
             const workspaceConfig = vscode.workspace.getConfiguration('', workspaceFolder.uri);
-              // 設定檔案參考 - 使用 .github\ 前綴
+              
+            // 設定檔案參考 - 使用 .github\ 前綴
             const settingValue = [
                 {
                     "file": `.github\\${filename}`
                 }
             ];
 
-            // 更新工作空間設定
+            // 所有需要寫入 workspace settings 的 GitHub Copilot 設定
+            const workspaceScopeOnlySettings = [
+                'github.copilot.chat.commitMessageGeneration.instructions',
+                'github.copilot.chat.reviewSelection.instructions',
+                'github.copilot.chat.codeGeneration.instructions',
+                'github.copilot.chat.pullRequestDescriptionGeneration.instructions',
+                'github.copilot.chat.testGeneration.instructions'
+            ];
+            
+            // 使用 Workspace 範圍寫入 workspace settings.json
+            const targetScope = vscode.ConfigurationTarget.Workspace;
+
+            // 更新設定
             await workspaceConfig.update(
                 config.vscodeSetting,
                 settingValue,
-                vscode.ConfigurationTarget.Workspace
+                targetScope
             );
 
-            console.log(`Updated VSCode setting: ${config.vscodeSetting} -> .github\\${filename}`);
+            console.log(`Updated VSCode setting (Workspace): ${config.vscodeSetting} -> .github\\${filename}`);
         } catch (error) {
-            console.error(`Error updating VSCode settings for ${filename}:`, error);            // 不顯示錯誤給用戶，因為這是額外功能
+            console.error(`Error updating VSCode settings for ${filename}:`, error);
+            // 不顯示錯誤給用戶，因為這是額外功能
         }
-    }
-
-    private async _removeVSCodeSettings(filename: string) {
+    }    private async _removeVSCodeSettings(filename: string) {
         try {
             const config = COPILOT_CONFIGS.find(c => c.filename === filename);
             if (!config?.vscodeSetting) {
@@ -411,16 +520,20 @@ class CopilotConfigPanel {
             // 取得工作空間設定
             const workspaceConfig = vscode.workspace.getConfiguration('', workspaceFolder.uri);
             
+            // 統一使用 Workspace 範圍 (與 _updateVSCodeSettings 保持一致)
+            const targetScope = vscode.ConfigurationTarget.Workspace;
+
             // 移除設定
             await workspaceConfig.update(
                 config.vscodeSetting,
                 undefined,
-                vscode.ConfigurationTarget.Workspace
+                targetScope
             );
 
-            console.log(`Removed VSCode setting: ${config.vscodeSetting}`);
+            console.log(`Removed VSCode setting (Workspace): ${config.vscodeSetting}`);
         } catch (error) {
-            console.error(`Error removing VSCode settings for ${filename}:`, error);        }
+            console.error(`Error removing VSCode settings for ${filename}:`, error);
+        }
     }
 
     public refreshFileStatus() {
@@ -526,8 +639,11 @@ class CopilotConfigPanel {
             font-style: italic;
         }
         .textarea-container {
-            margin-top: 10px;        }textarea {
-            width: 100%;
+            margin-top: 10px;        
+        }
+        
+        textarea {
+            width: 98%;
             min-height: 200px;
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
