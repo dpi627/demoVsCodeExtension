@@ -14,7 +14,7 @@ interface CopilotConfig {
 const COPILOT_CONFIGS: CopilotConfig[] = [
     {
         filename: 'copilot-instructions.md',
-        displayName: '通用指令',
+        displayName: 'Gerneral Instructions',
         description: '為 GitHub Copilot 設定通用的編程指令和偏好（僅在 .github 資料夾中儲存）',
         // 注意：此檔案不設定 vscodeSetting，僅在 .github 中產生檔案
         defaultContent: `# GitHub Copilot 通用指令
@@ -31,7 +31,7 @@ const COPILOT_CONFIGS: CopilotConfig[] = [
     },
     {
         filename: 'copilot-commit-message-instructions.md',
-        displayName: 'Commit 訊息指令',
+        displayName: 'Commit Message Instructions',
         description: '設定 GitHub Copilot 生成 commit 訊息的格式和風格',
         vscodeSetting: 'github.copilot.chat.commitMessageGeneration.instructions',
         defaultContent: `# Commit 訊息指令
@@ -59,7 +59,7 @@ docs(readme): 更新安裝說明
     },
     {
         filename: 'copilot-review-instructions.md',
-        displayName: 'Code Review 指令',
+        displayName: 'Code Review Instructions',
         description: '設定 GitHub Copilot 進行程式碼審查的標準和重點',
         vscodeSetting: 'github.copilot.chat.reviewSelection.instructions',
         defaultContent: `# Code Review 指令
@@ -83,7 +83,7 @@ docs(readme): 更新安裝說明
     },
     {
         filename: 'copilot-code-instructions.md',
-        displayName: '程式碼生成指令',
+        displayName: 'Coding Style Instructions',
         description: '設定 GitHub Copilot 生成程式碼的風格和標準',
         vscodeSetting: 'github.copilot.chat.codeGeneration.instructions',
         defaultContent: `# 程式碼生成指令
@@ -106,7 +106,7 @@ docs(readme): 更新安裝說明
     },
     {
         filename: 'copilot-pullrequest-instructions.md',
-        displayName: 'Pull Request 描述指令',
+        displayName: 'Pull Request Instructions',
         description: '設定 GitHub Copilot 生成 Pull Request 描述的格式和內容',
         vscodeSetting: 'github.copilot.chat.pullRequestDescriptionGeneration.instructions',
         defaultContent: `# Pull Request 描述指令
@@ -132,7 +132,7 @@ docs(readme): 更新安裝說明
     },
     {
         filename: 'copilot-test-instructions.md',
-        displayName: '測試生成指令',
+        displayName: 'Test Instructions',
         description: '設定 GitHub Copilot 生成測試的標準和格式',
         vscodeSetting: 'github.copilot.chat.testGeneration.instructions',
         defaultContent: `# 測試生成指令
@@ -829,8 +829,9 @@ class CopilotConfigPanel {
     <div class="subtitle">管理您的 GitHub Copilot 指令檔案，提升 AI 輔助編程體驗</div>
       <div class="warning-banner">
         <strong>📁 專案範圍設定</strong>
-        此擴展僅管理當前工作空間專案目錄下的 <code>.github/</code> 資料夾內的配置檔案。<br>
-        不會影響 GitHub Copilot 的全域設定或其他專案的配置。每個專案都可以有獨立的 Copilot 行為設定。
+        僅管理當前工作空間專案目錄下的 <code>.github/</code> 資料夾內的 <code>*.instructions.md</code> 配置檔案。<br>
+        不會影響 GitHub Copilot 的 vscode 全域設定或其他專案的配置。每個專案都可以有獨立的 Copilot 行為設定。<br>
+        儲存或刪除時，除了 <code>copilot-instructions.md</code> 之外，其餘檔案會自動新增或刪除 <code>.vscode/settings.json</code> 專案設定。<br>
     </div>
     
     <div id="configList">
