@@ -8,6 +8,7 @@ interface CopilotConfig {
     displayName: string;
     description: string;
     defaultContent: string;
+    vscodeSetting?: string; // VSCode 設定鍵名
 }
 
 const COPILOT_CONFIGS: CopilotConfig[] = [
@@ -15,6 +16,7 @@ const COPILOT_CONFIGS: CopilotConfig[] = [
         filename: 'copilot-instructions.md',
         displayName: '通用指令',
         description: '為 GitHub Copilot 設定通用的編程指令和偏好',
+        vscodeSetting: 'github.copilot.chat.instructions',
         defaultContent: `# GitHub Copilot 通用指令
 
 ## 編程風格
@@ -31,6 +33,7 @@ const COPILOT_CONFIGS: CopilotConfig[] = [
         filename: 'copilot-commit-message-instructions.md',
         displayName: 'Commit 訊息指令',
         description: '設定 GitHub Copilot 生成 commit 訊息的格式和風格',
+        vscodeSetting: 'github.copilot.chat.commitMessageGeneration.instructions',
         defaultContent: `# Commit 訊息指令
 
 ## 格式要求
@@ -58,6 +61,7 @@ docs(readme): 更新安裝說明
         filename: 'copilot-review-instructions.md',
         displayName: 'Code Review 指令',
         description: '設定 GitHub Copilot 進行程式碼審查的標準和重點',
+        vscodeSetting: 'github.copilot.chat.reviewSelection.instructions',
         defaultContent: `# Code Review 指令
 
 ## 審查重點
@@ -81,6 +85,7 @@ docs(readme): 更新安裝說明
         filename: 'copilot-chat-instructions.md',
         displayName: 'Chat 對話指令',
         description: '設定 GitHub Copilot Chat 的對話風格和回應方式',
+        vscodeSetting: 'github.copilot.chat.instructions',
         defaultContent: `# Copilot Chat 指令
 
 ## 對話風格
@@ -97,11 +102,11 @@ docs(readme): 更新安裝說明
 - 使用清晰的結構化回答
 - 包含程式碼範例
 - 提供相關文件連結`
-    },
-    {
+    },    {
         filename: 'copilot-code-instructions.md',
         displayName: '程式碼生成指令',
         description: '設定 GitHub Copilot 生成程式碼的風格和標準',
+        vscodeSetting: 'github.copilot.chat.codeGeneration.instructions',
         defaultContent: `# 程式碼生成指令
 
 ## 編碼標準
@@ -124,6 +129,7 @@ docs(readme): 更新安裝說明
         filename: 'copilot-workspace-instructions.md',
         displayName: '工作空間指令',
         description: '設定整個工作空間的 GitHub Copilot 行為',
+        vscodeSetting: 'github.copilot.chat.instructions',
         defaultContent: `# 工作空間指令
 
 ## 專案架構
@@ -208,8 +214,7 @@ class CopilotConfigPanel {
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
         this._panel.webview.onDidReceiveMessage(
-            async (message) => {
-                switch (message.command) {
+            async (message) => {                switch (message.command) {
                     case 'loadFile':
                         await this._loadFile(message.filename);
                         break;
@@ -218,6 +223,9 @@ class CopilotConfigPanel {
                         break;
                     case 'checkFileExists':
                         await this._checkFileExists(message.filename);
+                        break;
+                    case 'deleteFile':
+                        await this._deleteFile(message.filename);
                         break;
                 }
             },
@@ -283,9 +291,11 @@ class CopilotConfigPanel {
             // 確保 .github 目錄存在
             if (!fs.existsSync(githubDir)) {
                 fs.mkdirSync(githubDir, { recursive: true });
-            }
-
-            fs.writeFileSync(filePath, content, 'utf8');
+            }            fs.writeFileSync(filePath, content, 'utf8');
+            
+            // 同步更新 VSCode 設定
+            await this._updateVSCodeSettings(filename);
+            
             vscode.window.showInformationMessage(`已儲存 ${filename} 到當前專案的 .github 資料夾`);            
             
             this._panel.webview.postMessage({
@@ -326,7 +336,123 @@ class CopilotConfigPanel {
                 exists: false
             });
         }
-    }    public dispose() {
+    }    private async _updateVSCodeSettings(filename: string) {
+        try {
+            const config = COPILOT_CONFIGS.find(c => c.filename === filename);
+            if (!config?.vscodeSetting) {
+                return;
+            }
+
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                return;
+            }
+
+            // 取得工作空間設定
+            const workspaceConfig = vscode.workspace.getConfiguration('', workspaceFolder.uri);
+              // 設定檔案參考 - 使用 .github\ 前綴
+            const settingValue = [
+                {
+                    "file": `.github\\${filename}`
+                }
+            ];
+
+            // 更新工作空間設定
+            await workspaceConfig.update(
+                config.vscodeSetting,
+                settingValue,
+                vscode.ConfigurationTarget.Workspace
+            );
+
+            console.log(`Updated VSCode setting: ${config.vscodeSetting} -> .github\\${filename}`);
+        } catch (error) {
+            console.error(`Error updating VSCode settings for ${filename}:`, error);
+            // 不顯示錯誤給用戶，因為這是額外功能
+        }
+    }
+
+    private async _deleteFile(filename: string) {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('請先開啟一個工作空間。');
+            return;
+        }
+
+        // 驗證檔案名稱安全性
+        if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+            vscode.window.showErrorMessage('無效的檔案名稱');
+            return;
+        }
+
+        const filePath = path.join(workspaceFolder.uri.fsPath, '.github', filename);
+
+        try {
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                
+                // 清除對應的 VSCode 設定
+                await this._removeVSCodeSettings(filename);
+                
+                vscode.window.showInformationMessage(`已刪除檔案 ${filename}`);
+                
+                // 通知前端更新狀態
+                this._panel.webview.postMessage({
+                    command: 'fileDeleted',
+                    filename: filename,
+                    success: true
+                });
+                
+                // 重新檢查檔案狀態
+                await this._checkFileExists(filename);
+            } else {
+                vscode.window.showWarningMessage(`檔案 ${filename} 不存在`);
+                this._panel.webview.postMessage({
+                    command: 'fileDeleted',
+                    filename: filename,
+                    success: false
+                });
+            }
+        } catch (error) {
+            console.error(`Error deleting file ${filename}:`, error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`刪除檔案 ${filename} 失敗: ${errorMessage}`);
+            this._panel.webview.postMessage({
+                command: 'fileDeleted',
+                filename: filename,
+                success: false
+            });
+        }
+    }
+
+    private async _removeVSCodeSettings(filename: string) {
+        try {
+            const config = COPILOT_CONFIGS.find(c => c.filename === filename);
+            if (!config?.vscodeSetting) {
+                return;
+            }
+
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                return;
+            }
+
+            // 取得工作空間設定
+            const workspaceConfig = vscode.workspace.getConfiguration('', workspaceFolder.uri);
+            
+            // 移除設定
+            await workspaceConfig.update(
+                config.vscodeSetting,
+                undefined,
+                vscode.ConfigurationTarget.Workspace
+            );
+
+            console.log(`Removed VSCode setting: ${config.vscodeSetting}`);
+        } catch (error) {
+            console.error(`Error removing VSCode settings for ${filename}:`, error);
+        }
+    }
+
+    public dispose() {
         CopilotConfigPanel.currentPanel = undefined;
 
         this._panel.dispose();
@@ -410,11 +536,20 @@ class CopilotConfigPanel {
         .not-exists {
             background-color: var(--vscode-inputValidation-warningBackground);
             color: var(--vscode-inputValidation-warningForeground);
+        }        .filename {
+            color: var(--vscode-descriptionForeground);
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        .vscode-setting {
+            color: var(--vscode-textLink-foreground);
+            margin-bottom: 10px;
+            font-size: 12px;
+            font-style: italic;
         }
         .textarea-container {
             margin-top: 10px;
-        }
-        textarea {
+        }textarea {
             width: 95%;
             min-height: 200px;
             background-color: var(--vscode-input-background);
@@ -425,6 +560,38 @@ class CopilotConfigPanel {
             font-family: var(--vscode-editor-font-family);
             font-size: var(--vscode-editor-font-size);
             resize: vertical;
+            /* 現代化滾動條樣式 */
+            scrollbar-width: thin;
+            scrollbar-color: var(--vscode-scrollbarSlider-background) var(--vscode-editor-background);
+        }
+        
+        /* Webkit 瀏覽器滾動條樣式 */
+        textarea::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        textarea::-webkit-scrollbar-track {
+            background: var(--vscode-editor-background);
+            border-radius: 4px;
+        }
+        
+        textarea::-webkit-scrollbar-thumb {
+            background: var(--vscode-scrollbarSlider-background);
+            border-radius: 4px;
+            border: 2px solid var(--vscode-editor-background);
+        }
+        
+        textarea::-webkit-scrollbar-thumb:hover {
+            background: var(--vscode-scrollbarSlider-hoverBackground);
+        }
+        
+        textarea::-webkit-scrollbar-thumb:active {
+            background: var(--vscode-scrollbarSlider-activeBackground);
+        }
+        
+        textarea::-webkit-scrollbar-corner {
+            background: var(--vscode-editor-background);
         }
         .button-container {
             margin-top: 10px;
@@ -465,11 +632,18 @@ class CopilotConfigPanel {
 <body>
     <div class="title">GitHub Copilot 配置管理器</div>
     <div class="subtitle">管理您的 GitHub Copilot 指令檔案，提升 AI 輔助編程體驗</div>
-    
-    <div class="warning-banner">
+      <div class="warning-banner">
         <strong>📁 專案範圍設定</strong>
         此擴展僅管理當前工作空間專案目錄下的 <code>.github/</code> 資料夾內的配置檔案。<br>
         不會影響 GitHub Copilot 的全域設定或其他專案的配置。每個專案都可以有獨立的 Copilot 行為設定。
+    </div>
+    
+    <div class="warning-banner" style="background-color: var(--vscode-inputValidation-warningBackground); border-color: var(--vscode-inputValidation-warningBorder); color: var(--vscode-inputValidation-warningForeground);">
+        <strong>⚙️ 自動設定同步</strong>
+        儲存檔案時會自動更新對應的 VSCode 工作空間設定，包括：<br>
+        • <code>github.copilot.chat.instructions</code><br>
+        • <code>github.copilot.chat.commitMessageGeneration.instructions</code><br>
+        • <code>github.copilot.chat.reviewSelection.instructions</code>
     </div>
     
     <div id="configList">
@@ -478,16 +652,16 @@ class CopilotConfigPanel {
                 <div class="config-header">
                     <div class="config-title">${config.displayName}</div>
                     <div class="file-status" id="status-${config.filename}">檢查中...</div>
-                </div>
-                <div class="config-description">${config.description}</div>
+                </div>                <div class="config-description">${config.description}</div>
                 <div class="filename">檔案名稱: <code>.github/${config.filename}</code></div>
+                ${config.vscodeSetting ? `<div class="vscode-setting">VSCode 設定: <code>${config.vscodeSetting}</code></div>` : ''}
                 <div class="textarea-container">
                     <textarea id="content-${config.filename}" placeholder="載入中...">${config.defaultContent}</textarea>
-                </div>
-                <div class="button-container">
+                </div>                <div class="button-container">
                     <button onclick="saveFile('${config.filename}')">儲存檔案</button>
                     <button class="secondary-button" onclick="loadFile('${config.filename}')">重新載入</button>
                     <button class="secondary-button" onclick="resetToDefault('${config.filename}')">重設為預設</button>
+                    <button class="secondary-button" onclick="deleteFile('${config.filename}')" style="background-color: var(--vscode-inputValidation-errorBackground); color: var(--vscode-inputValidation-errorForeground);">刪除檔案</button>
                 </div>
             </div>
         `).join('')}
@@ -527,9 +701,7 @@ class CopilotConfigPanel {
             } catch (error) {
                 console.error('Error saving file:', error);
             }
-        }
-
-        function resetToDefault(filename) {
+        }        function resetToDefault(filename) {
             try {
                 const defaultContents = {
                     ${COPILOT_CONFIGS.map(config => `'${config.filename}': \`${config.defaultContent.replace(/[`\\$]/g, '\\$&')}\``).join(',\n                    ')}
@@ -541,6 +713,15 @@ class CopilotConfigPanel {
                 }
             } catch (error) {
                 console.error('Error resetting to default:', error);
+            }
+        }
+
+        function deleteFile(filename) {
+            if (confirm('確定要刪除檔案 ' + filename + ' 嗎？此操作無法復原。')) {
+                vscode.postMessage({
+                    command: 'deleteFile',
+                    filename: filename
+                });
             }
         }
 
@@ -569,8 +750,7 @@ class CopilotConfigPanel {
                         statusElement.className = 'file-status exists';
                     }
                     break;
-                    
-                case 'fileExistsResult':
+                      case 'fileExistsResult':
                     const status = document.getElementById('status-' + message.filename);
                     if (message.exists) {
                         status.textContent = '已存在';
@@ -578,6 +758,23 @@ class CopilotConfigPanel {
                     } else {
                         status.textContent = '不存在';
                         status.className = 'file-status not-exists';
+                    }
+                    break;
+                    
+                case 'fileDeleted':
+                    if (message.success) {
+                        // 清空 textarea 內容
+                        const textarea = document.getElementById('content-' + message.filename);
+                        if (textarea) {
+                            textarea.value = '';
+                        }
+                        
+                        // 更新狀態
+                        const statusElement = document.getElementById('status-' + message.filename);
+                        if (statusElement) {
+                            statusElement.textContent = '不存在';
+                            statusElement.className = 'file-status not-exists';
+                        }
                     }
                     break;
             }
