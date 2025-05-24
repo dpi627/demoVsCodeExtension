@@ -415,7 +415,7 @@ class CopilotConfigPanel {
             margin-top: 10px;
         }
         textarea {
-            width: 100%;
+            width: 95%;
             min-height: 200px;
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
