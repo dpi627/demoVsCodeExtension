@@ -2,6 +2,15 @@
 
 一個用於管理 GitHub Copilot 配置檔案的 Visual Studio Code 擴展。
 
+## ⚠️ 重要說明
+
+**此擴展僅管理當前工作空間專案的配置檔案，不會影響全域設定**
+
+- ✅ 只操作當前專案目錄下的 `.github/` 資料夾
+- ✅ 每個專案可以有獨立的 Copilot 行為設定
+- ✅ 不會修改 GitHub Copilot 的全域配置
+- ✅ 不會影響其他專案的 Copilot 設定
+
 ## 功能特色
 
 - 🔧 **統一管理**：在一個界面中管理所有 Copilot 配置檔案
@@ -80,9 +89,36 @@
    - 點擊 "重設為預設" 可以恢復預設的範本內容
    - 點擊 "重新載入" 可以從檔案重新載入內容
 
+## 工作原理
+
+### 專案層級配置
+GitHub Copilot 支援專案層級的配置檔案，這些檔案位於專案根目錄的 `.github/` 資料夾中：
+
+```
+your-project/                    ← 當前工作空間
+└── .github/                     ← 只在此資料夾內操作
+    ├── copilot-instructions.md
+    ├── copilot-commit-message-instructions.md
+    ├── copilot-review-instructions.md
+    ├── copilot-chat-instructions.md
+    ├── copilot-code-instructions.md
+    └── copilot-workspace-instructions.md
+```
+
+### 配置優先順序
+1. **專案配置** (本擴展管理的檔案) - 優先級最高
+2. **全域設定** - 當專案沒有特定配置時才使用
+3. **預設行為** - Copilot 的內建預設值
+
+### 安全性保證
+- 需要開啟工作空間才能使用
+- 路徑限制在當前工作空間內
+- 檔案操作僅限於 `.github/` 資料夾
+- 不會存取系統全域配置目錄
+
 ## 檔案結構
 
-安裝後，擴展會在您的專案根目錄建立以下結構：
+安裝後，擴展會在您的**當前專案**根目錄建立以下結構：
 
 ```
 your-project/
@@ -107,18 +143,10 @@ your-project/
 ```
 copilot-config-manager/
 ├── src/
-│   └── extension.ts          # 主要擴展邏輯檔案
-├── out/                      # 編譯後的 JavaScript 檔案 (自動生成)
-├── node_modules/             # NPM 依賴 (npm install 後生成)
-├── .vscode/
-│   ├── launch.json           # 除錯配置
-│   └── tasks.json            # 建置任務配置
-├── package.json              # 擴展配置和依賴
-├── tsconfig.json             # TypeScript 編譯配置
-├── README.md                 # 專案說明文件
-├── CHANGELOG.md              # 版本更新日誌
-├── LICENSE                   # 授權檔案
-└── .gitignore               # Git 忽略檔案配置
+│   └── extension.ts      # 主要擴展邏輯
+├── package.json          # 擴展配置
+├── tsconfig.json         # TypeScript 配置
+└── README.md            # 說明文件
 ```
 
 ### 本地開發

@@ -212,10 +212,11 @@ class CopilotConfigPanel {
     private async _loadFile(filename: string) {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
-            vscode.window.showErrorMessage('請先開啟一個工作空間');
+            vscode.window.showErrorMessage('請先開啟一個工作空間。此擴展僅管理當前專案的 .github 配置檔案，不會影響全域設定。');
             return;
         }
 
+        // 只操作當前工作空間的 .github 資料夾
         const filePath = path.join(workspaceFolder.uri.fsPath, '.github', filename);
         
         try {
@@ -239,10 +240,11 @@ class CopilotConfigPanel {
     private async _saveFile(filename: string, content: string) {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
-            vscode.window.showErrorMessage('請先開啟一個工作空間');
+            vscode.window.showErrorMessage('請先開啟一個工作空間。此擴展僅管理當前專案的配置檔案。');
             return;
         }
 
+        // 確保只在當前工作空間內操作
         const githubDir = path.join(workspaceFolder.uri.fsPath, '.github');
         const filePath = path.join(githubDir, filename);
 
@@ -253,7 +255,7 @@ class CopilotConfigPanel {
             }
 
             fs.writeFileSync(filePath, content, 'utf8');
-            vscode.window.showInformationMessage(`已儲存 ${filename}`);
+            vscode.window.showInformationMessage(`已儲存 ${filename} 到當前專案的 .github 資料夾`);            
             
             this._panel.webview.postMessage({
                 command: 'fileSaved',
@@ -317,6 +319,18 @@ class CopilotConfigPanel {
             background-color: var(--vscode-editor-background);
             padding: 20px;
             margin: 0;
+        }
+        .warning-banner {
+            background-color: var(--vscode-inputValidation-infoBackground);
+            border: 1px solid var(--vscode-inputValidation-infoBorder);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 20px;
+            color: var(--vscode-inputValidation-infoForeground);
+        }
+        .warning-banner strong {
+            display: block;
+            margin-bottom: 5px;
         }
         .config-item {
             margin-bottom: 20px;
@@ -409,6 +423,12 @@ class CopilotConfigPanel {
 <body>
     <div class="title">GitHub Copilot 配置管理器</div>
     <div class="subtitle">管理您的 GitHub Copilot 指令檔案，提升 AI 輔助編程體驗</div>
+    
+    <div class="warning-banner">
+        <strong>📁 專案範圍設定</strong>
+        此擴展僅管理當前工作空間專案目錄下的 <code>.github/</code> 資料夾內的配置檔案。<br>
+        不會影響 GitHub Copilot 的全域設定或其他專案的配置。每個專案都可以有獨立的 Copilot 行為設定。
+    </div>
     
     <div id="configList">
         ${COPILOT_CONFIGS.map(config => `
