@@ -248,9 +248,7 @@ export function activate(context: vscode.ExtensionContext) {
                 console.error('Error opening Copilot Config Manager:', error);
                 vscode.window.showErrorMessage('無法開啟 Copilot Config Manager：' + (error instanceof Error ? error.message : String(error)));
             }
-        });
-
-        // 註冊手動同步現有檔案的命令
+        });        // 註冊手動同步現有檔案的命令
         const syncCommand = vscode.commands.registerCommand('copilotConfigManager.syncExistingFiles', async () => {
             try {
                 await initializeSyncExistingFiles();
@@ -259,7 +257,23 @@ export function activate(context: vscode.ExtensionContext) {
                 console.error('Error syncing existing files:', error);
                 vscode.window.showErrorMessage('同步現有檔案時發生錯誤：' + (error instanceof Error ? error.message : String(error)));
             }
-        });        // 建立並註冊樹狀視圖提供者 (Explorer 面板)
+        });
+
+        // 註冊定位到特定配置項目的命令
+        const openConfigCommand = vscode.commands.registerCommand('copilotConfigManager.openConfig', (filename: string) => {
+            try {
+                CopilotConfigPanel.createOrShow(context.extensionUri);
+                // 等待面板創建後再發送定位訊息
+                setTimeout(() => {
+                    if (CopilotConfigPanel.currentPanel) {
+                        CopilotConfigPanel.currentPanel.focusConfig(filename);
+                    }
+                }, 100);
+            } catch (error) {
+                console.error('Error opening config:', error);
+                vscode.window.showErrorMessage('無法開啟配置：' + (error instanceof Error ? error.message : String(error)));
+            }
+        });// 建立並註冊樹狀視圖提供者 (Explorer 面板)
         const provider = new CopilotConfigProvider();
         const treeView = vscode.window.createTreeView('copilotConfigManager.view', {
             treeDataProvider: provider,
@@ -295,6 +309,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
         });        context.subscriptions.push(disposable);
         context.subscriptions.push(syncCommand);
+        context.subscriptions.push(openConfigCommand);
         context.subscriptions.push(treeView);
         context.subscriptions.push(activityBarTreeView);
         context.subscriptions.push(fileWatcher);
@@ -346,17 +361,20 @@ class CopilotConfigPanel {
 
         this._update();
 
-        this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-
-        this._panel.webview.onDidReceiveMessage(
-            async (message) => {                switch (message.command) {
+        this._panel.onDidDispose(() => this.dispose(), null, this._disposables);        this._panel.webview.onDidReceiveMessage(
+            async (message) => {
+                switch (message.command) {
                     case 'loadFile':
                         await this._loadFile(message.filename);
-                        break;                    case 'saveFile':
+                        break;
+                    case 'saveFile':
                         await this._saveFile(message.filename, message.content);
                         break;
                     case 'checkFileExists':
                         await this._checkFileExists(message.filename);
+                        break;
+                    case 'removeFile':
+                        await this._removeFile(message.filename);
                         break;
                 }
             },
@@ -538,16 +556,87 @@ class CopilotConfigPanel {
                 targetScope
             );
 
-            console.log(`Removed VSCode setting (Workspace): ${config.vscodeSetting}`);
-        } catch (error) {
+            console.log(`Removed VSCode setting (Workspace): ${config.vscodeSetting}`);        } catch (error) {
             console.error(`Error removing VSCode settings for ${filename}:`, error);
         }
     }
 
-    public refreshFileStatus() {
+    private async _removeFile(filename: string) {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('請先開啟一個工作空間。');
+            return;
+        }
+
+        // 驗證檔案名稱安全性
+        if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+            vscode.window.showErrorMessage('無效的檔案名稱');
+            return;
+        }
+
+        const filePath = path.join(workspaceFolder.uri.fsPath, '.github', filename);
+
+        try {
+            // 檢查檔案是否存在
+            if (!fs.existsSync(filePath)) {
+                vscode.window.showInformationMessage(`檔案 ${filename} 不存在`);
+                this._panel.webview.postMessage({
+                    command: 'fileRemoved',
+                    filename: filename,
+                    success: false,
+                    message: '檔案不存在'
+                });
+                return;
+            }
+
+            // 顯示確認對話框
+            const choice = await vscode.window.showWarningMessage(
+                `確定要刪除 ${filename} 嗎？此操作無法復原。`,
+                { modal: true },
+                '確定刪除',
+                '取消'
+            );
+
+            if (choice !== '確定刪除') {
+                return;
+            }
+
+            // 刪除檔案
+            fs.unlinkSync(filePath);
+            
+            // 移除 VSCode 設定
+            await this._removeVSCodeSettings(filename);
+            
+            vscode.window.showInformationMessage(`已刪除 ${filename}`);
+            
+            this._panel.webview.postMessage({
+                command: 'fileRemoved',
+                filename: filename,
+                success: true
+            });
+        } catch (error) {
+            console.error(`Error removing file ${filename}:`, error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`刪除 ${filename} 失敗: ${errorMessage}`);
+            this._panel.webview.postMessage({
+                command: 'fileRemoved',
+                filename: filename,
+                success: false,
+                message: errorMessage
+            });
+        }
+    }public refreshFileStatus() {
         // 重新檢查所有配置檔案的狀態
         COPILOT_CONFIGS.forEach(config => {
             this._checkFileExists(config.filename);
+        });
+    }
+
+    public focusConfig(filename: string) {
+        // 發送訊息到 webview 讓它定位到特定的配置項目
+        this._panel.webview.postMessage({
+            command: 'focusConfig',
+            filename: filename
         });
     }
 
@@ -714,9 +803,16 @@ class CopilotConfigPanel {
         .secondary-button {
             background-color: var(--vscode-button-secondaryBackground);
             color: var(--vscode-button-secondaryForeground);
-        }
-        .secondary-button:hover {
+        }        .secondary-button:hover {
             background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+        .remove-button {
+            background-color: var(--vscode-errorForeground);
+            color: var(--vscode-editor-background);
+        }
+        .remove-button:hover {
+            background-color: var(--vscode-errorForeground);
+            opacity: 0.8;
         }
         .title {
             font-size: 24px;
@@ -726,62 +822,7 @@ class CopilotConfigPanel {
         }        .subtitle {
             margin-bottom: 30px;
             color: var(--vscode-descriptionForeground);
-        }
-        
-        /* 放大編輯器樣式 */
-        .expand-button {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            border-radius: 4px;
-            padding: 4px 8px;
-            cursor: pointer;
-            font-size: 12px;
-            margin-left: 10px;
-        }
-        
-        .expand-button:hover {
-            background-color: var(--vscode-button-hoverBackground);
-        }
-        
-        .expanded-editor {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: var(--vscode-editor-background);
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        
-        .expanded-editor textarea {
-            flex: 1;
-            min-height: calc(100vh - 120px);
-            margin: 10px 0;
-        }
-        
-        .expanded-editor .button-container {
-            margin-top: 20px;
-        }
-        
-        .close-button {
-            background-color: var(--vscode-inputValidation-errorBackground);
-            color: var(--vscode-inputValidation-errorForeground);
-            border: none;
-            border-radius: 4px;
-            padding: 6px 14px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        
-        .close-button:hover {
-            opacity: 0.8;
-        }
-    </style>
+        }    </style>
 </head>
 <body>
     <div class="title">GitHub Copilot 配置管理器</div>
@@ -792,23 +833,14 @@ class CopilotConfigPanel {
         不會影響 GitHub Copilot 的全域設定或其他專案的配置。每個專案都可以有獨立的 Copilot 行為設定。
     </div>
     
-    <div class="warning-banner" style="background-color: var(--vscode-inputValidation-warningBackground); border-color: var(--vscode-inputValidation-warningBorder); color: var(--vscode-inputValidation-warningForeground);">
-        <strong>⚙️ 自動設定同步</strong>
-        儲存檔案時會自動更新對應的 VSCode 工作空間設定，包括：<br>
-        • <code>github.copilot.chat.instructions</code><br>
-        • <code>github.copilot.chat.commitMessageGeneration.instructions</code><br>
-        • <code>github.copilot.chat.reviewSelection.instructions</code>
-    </div>
-    
     <div id="configList">
         ${COPILOT_CONFIGS.map(config => `
             <div class="config-item" data-filename="${config.filename}">                <div class="config-header">
                     <div class="config-title">
                         ${config.displayName}
-                        <button class="expand-button" onclick="expandEditor('${config.filename}')">🔍 放大編輯</button>
                     </div>
                     <div class="file-status" id="status-${config.filename}">檢查中...</div>
-                </div>                <div class="config-description">${config.description}</div>
+                </div><div class="config-description">${config.description}</div>
                 <div class="filename">檔案名稱: <code>.github/${config.filename}</code></div>
                 ${config.vscodeSetting ? `<div class="vscode-setting">VSCode 設定: <code>${config.vscodeSetting}</code></div>` : ''}
                 <div class="textarea-container">
@@ -817,6 +849,7 @@ class CopilotConfigPanel {
                     <button onclick="saveFile('${config.filename}')">儲存檔案</button>
                     <button class="secondary-button" onclick="loadFile('${config.filename}')">重新載入</button>
                     <button class="secondary-button" onclick="resetToDefault('${config.filename}')">重設為預設</button>
+                    <button class="remove-button" onclick="removeFile('${config.filename}')">刪除檔案</button>
                 </div>
             </div>
         `).join('')}
@@ -866,67 +899,33 @@ class CopilotConfigPanel {
                 const textarea = document.getElementById('content-' + filename);
                 if (textarea) {
                     textarea.value = defaultContents[filename] || '';
-                }
-            } catch (error) {
+                }            } catch (error) {
                 console.error('Error resetting to default:', error);
             }
         }
 
-        // 放大編輯器功能
-        function expandEditor(filename) {
-            const currentContent = document.getElementById('content-' + filename).value;
-            const configItem = COPILOT_CONFIGS.find(c => c.filename === filename);
-            
-            const expandedDiv = document.createElement('div');
-            expandedDiv.className = 'expanded-editor';
-            expandedDiv.innerHTML = \`
-                <h2>\${configItem?.displayName || filename}</h2>
-                <textarea id="expanded-content-\${filename}" placeholder="編輯內容...">\${currentContent}</textarea>
-                <div class="button-container">
-                    <button onclick="saveFromExpanded('\${filename}')">儲存檔案</button>
-                    <button class="secondary-button" onclick="syncFromExpanded('\${filename}')">同步回原編輯器</button>
-                    <button class="close-button" onclick="closeExpandedEditor()">關閉</button>
-                </div>
-            \`;
-            
-            document.body.appendChild(expandedDiv);
-            
-            // 聚焦到放大的 textarea
-            setTimeout(() => {
-                document.getElementById('expanded-content-' + filename).focus();
-            }, 100);
+        function removeFile(filename) {
+            vscode.postMessage({
+                command: 'removeFile',
+                filename: filename
+            });
         }
-        
-        function saveFromExpanded(filename) {
-            const expandedTextarea = document.getElementById('expanded-content-' + filename);
-            if (expandedTextarea) {
-                // 同步內容到原始 textarea
-                const originalTextarea = document.getElementById('content-' + filename);
-                if (originalTextarea) {
-                    originalTextarea.value = expandedTextarea.value;
-                }
+
+        function focusOnConfig(filename) {
+            const configItem = document.querySelector('[data-filename="' + filename + '"]');
+            if (configItem) {
+                configItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 
-                // 儲存檔案
-                saveFile(filename);
+                // 添加高亮效果
+                configItem.style.transition = 'all 0.3s ease';
+                configItem.style.transform = 'scale(1.02)';
+                configItem.style.boxShadow = '0 4px 12px rgba(0, 123, 255, 0.3)';
                 
-                // 關閉放大編輯器
-                closeExpandedEditor();
-            }
-        }
-        
-        function syncFromExpanded(filename) {
-            const expandedTextarea = document.getElementById('expanded-content-' + filename);
-            const originalTextarea = document.getElementById('content-' + filename);
-            
-            if (expandedTextarea && originalTextarea) {
-                originalTextarea.value = expandedTextarea.value;
-            }
-        }
-        
-        function closeExpandedEditor() {
-            const expandedDiv = document.querySelector('.expanded-editor');
-            if (expandedDiv) {
-                expandedDiv.remove();
+                // 移除高亮效果
+                setTimeout(() => {
+                    configItem.style.transform = 'scale(1)';
+                    configItem.style.boxShadow = 'none';
+                }, 1000);
             }
         }
 
@@ -947,22 +946,38 @@ class CopilotConfigPanel {
                         statusElement.className = 'file-status not-exists';
                     }
                     break;
-                    
-                case 'fileSaved':
+                      case 'fileSaved':
                     if (message.success) {
                         const statusElement = document.getElementById('status-' + message.filename);
                         statusElement.textContent = '已存在';
                         statusElement.className = 'file-status exists';
                     }
                     break;
-                      case 'fileExistsResult':
+                    
+                case 'fileExistsResult':
                     const status = document.getElementById('status-' + message.filename);
                     if (message.exists) {
                         status.textContent = '已存在';
                         status.className = 'file-status exists';
                     } else {
-                        status.textContent = '不存在';                        status.className = 'file-status not-exists';
+                        status.textContent = '不存在';
+                        status.className = 'file-status not-exists';
                     }
+                    break;
+                    
+                case 'fileRemoved':
+                    if (message.success) {
+                        const statusElement = document.getElementById('status-' + message.filename);
+                        statusElement.textContent = '不存在';
+                        statusElement.className = 'file-status not-exists';
+                        
+                        // 清空內容區域，載入預設內容
+                        resetToDefault(message.filename);
+                    }
+                    break;
+                    
+                case 'focusConfig':
+                    focusOnConfig(message.filename);
                     break;
             }
         });
@@ -998,9 +1013,7 @@ class CopilotConfigProvider implements vscode.TreeDataProvider<CopilotConfigItem
 
     getTreeItem(element: CopilotConfigItem): vscode.TreeItem {
         return element;
-    }
-
-    getChildren(element?: CopilotConfigItem): Thenable<CopilotConfigItem[]> {
+    }    getChildren(element?: CopilotConfigItem): Thenable<CopilotConfigItem[]> {
         if (!element) {
             // 返回根級項目
             return Promise.resolve(COPILOT_CONFIGS.map(config => 
@@ -1009,9 +1022,9 @@ class CopilotConfigProvider implements vscode.TreeDataProvider<CopilotConfigItem
                     config,
                     vscode.TreeItemCollapsibleState.None,
                     {
-                        command: 'copilotConfigManager.openManager',
-                        title: 'Open Config Manager',
-                        arguments: []
+                        command: 'copilotConfigManager.openConfig',
+                        title: 'Open Config',
+                        arguments: [config.filename]
                     }
                 )
             ));
